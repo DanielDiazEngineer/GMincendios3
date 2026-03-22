@@ -1,0 +1,53 @@
+# Unity generated
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+
+
+
+
+
+# Reimportable Asset Store / UPM-unpacked packages
+Assets/TextMesh Pro/
+Assets/Oculus/
+Assets/Plugins/Oculus/
+Assets/Meta/
+Assets/AutoHand/
+
+# Their .meta files too
+Assets/TextMesh Pro.meta
+Assets/Oculus.meta
+Assets/Plugins/Oculus.meta
+Assets/Meta.meta
+Assets/AutoHand.meta
+
+
+
+
+
+
+
+# VisualStudio / Rider
+.vs/
+.idea/
+*.csproj
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Unity asset meta files for ignored paths
+/[Ll]ibrary/
+
+# Crash reports
+sysinfo.txt
+*.stackdump
