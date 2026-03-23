@@ -260,8 +260,9 @@ namespace Meta.XR.BuildingBlocks
                 bool handNearby = IsHandNearController();
                 //bool handGrabbing = rightHand != null && rightHand.gripAmount >= grabThreshold;
                 bool handGrabbing = GetHandClosedness() >= grabThreshold;
-                Debug.Log("$$$$closed hand");
-                extinguisher._isTriggerHeld = handNearby && handGrabbing;
+
+                //TODO FIX handnearby support //is it hand of controller?
+                extinguisher._isTriggerHeld = handGrabbing; //disabledd &&handNearby ;
             }
             else if (!HasValidPose)
             {
