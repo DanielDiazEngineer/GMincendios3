@@ -65,6 +65,10 @@ namespace Meta.XR.BuildingBlocks
 
         [SerializeField] private OVRSkeleton ovrSkeletonRight;  // ADD
         [SerializeField] private OVRSkeleton ovrSkeletonLeft;   // ADD
+        [SerializeField] private float thumbCurlThreshold = 0.86f;  //thumb0, thumb 1 (button rpess could be .4)
+        [SerializeField] private float minFingerBendForThumb = 0.26f; // set to 0 to ignore
+
+
 
         [Header("Hand Roles")]
         [Tooltip("True  = right hand on handle (trigger), left hand on nozzle.\n" +
@@ -295,8 +299,9 @@ namespace Meta.XR.BuildingBlocks
             }
 
             // Condition 2: grabber hand must be sufficiently closed
-            GrabberClosedness = GetHandClosedness(GrabberHand);
-            bool handClosed = GrabberClosedness >= grabThreshold;
+            // GrabberClosedness = GetHandClosedness(GrabberHand);
+            // bool handClosed = GrabberClosedness >= grabThreshold;
+            bool handClosed = IsThumbPressingDown(GrabberHand);
 
             // Condition 3 (optional): hands must be close enough to each other
             bool proximityOk = true;
@@ -359,7 +364,7 @@ namespace Meta.XR.BuildingBlocks
                        + GetBoneCurl(skeleton, OVRSkeleton.BoneId.Hand_Middle1)
                        + GetBoneCurl(skeleton, OVRSkeleton.BoneId.Hand_Ring1);
 
-            Debug.Log($" {GetBoneCurl(skeleton, OVRSkeleton.BoneId.Hand_Index2)} {GetBoneCurl(skeleton, OVRSkeleton.BoneId.Hand_Middle1)}  {GetBoneCurl(skeleton, OVRSkeleton.BoneId.Hand_Ring1)} ");
+            // Debug.Log($" {GetBoneCurl(skeleton, OVRSkeleton.BoneId.Hand_Index2)} {GetBoneCurl(skeleton, OVRSkeleton.BoneId.Hand_Middle1)}  {GetBoneCurl(skeleton, OVRSkeleton.BoneId.Hand_Ring1)} ");
 
             return Mathf.Clamp01(curl / 3f);
         }
@@ -407,6 +412,54 @@ namespace Meta.XR.BuildingBlocks
                 return Mathf.Clamp01(best / 90f);
             }
             return 0f;
+        }
+
+        private float GetBoneCurlThumb(OVRSkeleton skeleton, OVRSkeleton.BoneId boneId)
+        {
+            var bones = skeleton.Bones;
+            foreach (var bone in bones)
+            {
+                if (bone.Id != boneId) continue;
+
+                Vector3 euler = bone.Transform.localRotation.eulerAngles;
+
+                // Remap all axes from 0-360 to -180/+180
+                float x = euler.x > 180f ? euler.x - 360f : euler.x;
+                float y = euler.y > 180f ? euler.y - 360f : euler.y;
+                float z = euler.z > 180f ? euler.z - 360f : euler.z;
+
+                // Log all three to find which axis actually moves on curl
+                Debug.Log($"[Bone {boneId}] X:{x:F1} Y:{y:F1} Z:{z:F1}");
+
+                // Return max across all axes temporarily — so you see a response
+                // regardless of which axis is correct
+                float best = Mathf.Max(Mathf.Abs(x), Mathf.Abs(y), Mathf.Abs(z));
+                return Mathf.Clamp01(best / 90f);
+            }
+            return 0f;
+        }
+
+        private float GetThumbCurl(OVRHand hand)
+        {
+            if (hand == null || !hand.IsTracked) return 0f;
+            if (hand.HandConfidence != OVRHand.TrackingConfidence.High) return 0f;
+
+            OVRSkeleton skeleton = (hand == ovrHandRight) ? ovrSkeletonRight : ovrSkeletonLeft;
+            if (skeleton == null || !skeleton.IsInitialized) return 0f;
+
+            // Hand_ThumbTip0 = thumb proximal — first joint that bends downward
+            return GetBoneCurlThumb(skeleton, OVRSkeleton.BoneId.Hand_Thumb0);
+        }
+
+        private bool IsThumbPressingDown(OVRHand hand)
+        {
+            float thumb = GetThumbCurl(hand);
+            float fingers = GetHandClosedness(hand); // reuse existing
+
+            bool thumbDown = thumb >= thumbCurlThreshold;
+            bool fingersEngaged = minFingerBendForThumb <= 0f || fingers >= minFingerBendForThumb;
+
+            return thumbDown && fingersEngaged;
         }
 
 
