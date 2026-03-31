@@ -15,6 +15,9 @@ public class leveldemonew : MonoBehaviour
     [Tooltip("The ExtinguisherBehavior on the extinguisher object.")]
     public ExtinguisherBehavior extinguisherBehavior;
 
+    [Header("HUD")]                                              // ← NEW
+    public FireTrainingHUD hud;                                  // ← NEW
+
     [Header("Controller Trigger Shoot")]
     [Tooltip("Which controller triggers the spray via button input.")]
     public OVRInput.Controller shootController = OVRInput.Controller.RTouch;
@@ -23,19 +26,13 @@ public class leveldemonew : MonoBehaviour
     [Tooltip("Hold joystick down for this many seconds to restart.")]
     public float restartHoldTime = 2f;
 
-    // ── State ────────────────────────────────────────────────────────
+    // ── State ────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Set to true once the user has passed the intro panels.
-    /// Hand gesture shooting is gated on this flag.
-    /// Controller trigger shooting is also gated — change if you want
-    /// the controller always available regardless of intro state.
-    /// </summary>
     private bool _introComplete = false;
     private float _restartHoldTimer = 0f;
     private AudioSource _audio;
 
-    // ── Lifecycle ────────────────────────────────────────────────────
+    // ── Lifecycle ────────────────────────────────────────────────────────────
 
     void Start()
     {
@@ -44,67 +41,42 @@ public class leveldemonew : MonoBehaviour
 
     void Update()
     {
-        // HandleControllerShoot();
         HandleRestartInput();
     }
 
-    // ── Intro Gate ───────────────────────────────────────────────────
+    // ── Intro Gate ───────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Call this from your last intro panel's "Continue" button.
-    /// Unlocks both hand gesture and controller trigger shooting.
+    /// Call from the last intro panel's "Continue" button.
+    /// Unlocks shooting and activates the step-by-step HUD.
     /// </summary>
     public void CompleteIntro()
     {
         _introComplete = true;
         if (extinguisherBehavior != null)
             extinguisherBehavior.shootingEnabled = true;
+        if (hud != null) hud.ActivateHUD();                      // ← NEW
         Debug.Log("[leveldemo] Intro complete — shooting enabled.");
     }
 
-    /// <summary>
-    /// Called by MetaXRControllerEvent. Activates spray only if intro is complete.
-    /// </summary>
+    /// <summary>Called by MetaXRControllerEvent on Press.</summary>
     public void TryShoot()
     {
         if (!_introComplete || extinguisherBehavior == null) return;
         extinguisherBehavior._controllerTriggerHeld = true;
     }
 
-    /// <summary>
-    /// Called by MetaXRControllerEvent on Release.
-    /// </summary>
+    /// <summary>Called by MetaXRControllerEvent on Release.</summary>
     public void StopShoot()
     {
         if (extinguisherBehavior == null) return;
         extinguisherBehavior._controllerTriggerHeld = false;
     }
 
-
-
-    // ── Controller Trigger Shoot ─────────────────────────────────────
-
-    private void HandleControllerShoot()
-    {
-        if (!_introComplete || extinguisherBehavior == null) return;
-
-        // Only override _isTriggerHeld if the controller is actually being used.
-        // If a HandTrackingExtinguisherTracker is also active, this OR means
-        // either source can activate spray.
-        float trigger = OVRInput.Get(OVRInput.Axis1D.PrimaryIndexTrigger, shootController);
-        bool controllerShooting = trigger >= 0.5f;
-
-        if (controllerShooting)
-            extinguisherBehavior._isTriggerHeld = true;
-        // Note: do NOT set false here — let the hand tracker manage its own state.
-        // Only force-true from controller so both inputs can coexist.
-    }
-
-    // ── Scene Restart ────────────────────────────────────────────────
+    // ── Scene Restart ────────────────────────────────────────────────────────
 
     private void HandleRestartInput()
     {
-        // OVRInput.Button.PrimaryThumbstick = joystick click (press down)
         if (OVRInput.Get(OVRInput.Button.PrimaryThumbstick))
         {
             _restartHoldTimer += Time.deltaTime;
@@ -123,7 +95,7 @@ public class leveldemonew : MonoBehaviour
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
-    // ── Original Flow ────────────────────────────────────────────────
+    // ── Original Flow ────────────────────────────────────────────────────────
 
     public void AboutStart()
     {
@@ -131,6 +103,7 @@ public class leveldemonew : MonoBehaviour
         _audio.Play();
         canvasconato.SetActive(true);
         fire1.SetActive(true);
+        if (hud != null) hud.SetFire(fire1);                     // ← NEW
         // fire2.SetActive(true);
         // extin.SetActive(true);
     }
