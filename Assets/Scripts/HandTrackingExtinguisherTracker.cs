@@ -429,7 +429,7 @@ namespace Meta.XR.BuildingBlocks
                 float z = euler.z > 180f ? euler.z - 360f : euler.z;
 
                 // Log all three to find which axis actually moves on curl
-                Debug.Log($"[Bone {boneId}] X:{x:F1} Y:{y:F1} Z:{z:F1}");
+               // Debug.Log($"[Bone {boneId}] X:{x:F1} Y:{y:F1} Z:{z:F1}");
 
                 // Return max across all axes temporarily — so you see a response
                 // regardless of which axis is correct

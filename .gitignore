@@ -9,7 +9,8 @@
 
 
 
-
+.vscode/
+.vscode
 
 # Reimportable Asset Store / UPM-unpacked packages
 Assets/TextMesh Pro/
@@ -51,3 +52,4 @@ Thumbs.db
 # Crash reports
 sysinfo.txt
 *.stackdump
+.vscode/settings.json

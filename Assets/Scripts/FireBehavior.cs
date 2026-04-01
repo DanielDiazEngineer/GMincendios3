@@ -3,63 +3,76 @@ using UnityEngine;
 namespace Meta.XR.BuildingBlocks
 {
     /// <summary>
-    /// Attached to each fire gameplay object.
-    /// Tracks how long the extinguisher ray has been aimed at the fire's base.
-    /// When enough time accumulates, the fire is extinguished.
+    /// Attached to each fire gameplay object (box, barrel, desk zone).
+    /// Tracks extinguisher spray accumulation and extinguishes when threshold is met.
     ///
-    /// Setup on Fire Prefab:
-    ///   - Particle System (flames)
-    ///   - A Collider at the BASE of the fire (BoxCollider or CapsuleCollider)
-    ///     tagged "FireBase" — this is the raycast target
-    ///   - This script (auto-added by FireTrainingController if missing)
+    /// Barrel setup: place this component on a child GO above the barrel rim.
+    /// The barrel mesh collider blocks side shots naturally — no layer tricks needed.
     ///
-    /// The extinguisher raycasts and calls ApplyExtinguisher() each frame it hits.
+    /// Desk zone setup: DeskFireBehavior sets SweepGateOpen each frame.
+    /// Progress only accumulates when that gate is open (nozzle moving laterally).
     /// </summary>
     public class FireBehavior : MonoBehaviour
     {
-        [Header("Extinguishing Settings")]
-        [Tooltip("Seconds of continuous spray needed to extinguish this fire.")]
+        [Header("Extinguishing")]
+        [Tooltip("Seconds of continuous spray needed to extinguish.")]
         [SerializeField] private float timeToExtinguish = 3f;
 
-        [Tooltip("If spray stops, how fast the progress decays (seconds per second). 0 = no decay.")]
+        [Tooltip("Progress decay per second when not being sprayed. 0 = no decay.")]
         [SerializeField] private float decayRate = 0.5f;
 
+        [Header("Fire Target Layer")]
+        [Tooltip("If > 0, the fire's detection collider is moved to this layer. " +
+                 "Leave at 0 unless you have a specific reason to separate layers.")]
+        [SerializeField] private int fireTargetLayer = 0;
+
         [Header("Visual Feedback")]
-        [Tooltip("Optional: particle system to shrink as fire is being extinguished.")]
         [SerializeField] public ParticleSystem fireParticles;
-        [Tooltip("Optional: light to dim as fire is extinguished.")]
         [SerializeField] private Light fireLight;
+        [Header("Halo")]
+        [SerializeField] private GameObject halo;
 
         [Header("Audio")]
         [SerializeField] private AudioClip extinguishSound;
 
-        // ─── State ─────────────────────────────────────────────────────
+        // ── State ──────────────────────────────────────────────────────────────
 
         private FireTrainingController _controller;
-        private float _extinguishProgress = 0f; // 0 → timeToExtinguish
+        private float _extinguishProgress = 0f;
         private bool _isBeingSprayed = false;
         private bool _extinguished = false;
 
-        // Cache initial values for scaling feedback
-        private float _initialParticleRate = 6.4f;//TDO REMOVE HERE
+        private float _initialParticleRate;
         private float _initialLightIntensity;
+
+        /// <summary>
+        /// Set by DeskFireBehavior each frame. When false, spray accumulation is paused.
+        /// Defaults to true — non-desk fires are always open.
+        /// </summary>
+        [HideInInspector] public bool SweepGateOpen = true;
+
+        /// <summary>Used by DeskFireBehavior to count zone completion exactly once.</summary>
+        [HideInInspector] public bool ReportedToDesk = false;
 
         public float ExtinguishPercent => Mathf.Clamp01(_extinguishProgress / timeToExtinguish);
         public bool IsExtinguished => _extinguished;
 
-        // ─── Init ──────────────────────────────────────────────────────
+        // ── Lifecycle ──────────────────────────────────────────────────────────
 
-        public void Start() ///TODO REMOVE AN LET CONTROLLED DO
+        private void Start()
         {
-            if (fireParticles == null)
-                fireParticles = GetComponentInChildren<ParticleSystem>();
+            AutoSetup();
         }
 
+        /// <summary>Called by FireTrainingController when spawning at runtime.</summary>
         public void Init(FireTrainingController controller)
         {
             _controller = controller;
+            AutoSetup();
+        }
 
-            // Auto-find particle system if not assigned
+        private void AutoSetup()
+        {
             if (fireParticles == null)
                 fireParticles = GetComponentInChildren<ParticleSystem>();
 
@@ -75,24 +88,32 @@ namespace Meta.XR.BuildingBlocks
             if (fireLight != null)
                 _initialLightIntensity = fireLight.intensity;
 
-            // Ensure we have a collider for raycast hits
+            EnsureCollider();
+        }
+
+        private void EnsureCollider()
+        {
             var col = GetComponentInChildren<Collider>();
             if (col == null)
             {
                 var box = gameObject.AddComponent<BoxCollider>();
-                box.size = new Vector3(0.3f, 0.4f, 0.3f); // reasonable fire base size
-                box.center = new Vector3(0f, 0.2f, 0f);    // centered at base
-                Debug.Log("[FireBehavior] Auto-added BoxCollider for raycast targeting.");
+                box.size = new Vector3(0.3f, 0.4f, 0.3f);
+                box.center = new Vector3(0f, 0.2f, 0f);
+                col = box;
+                Debug.Log($"[FireBehavior] Auto-added BoxCollider on '{name}'.");
             }
+
+            if (fireTargetLayer > 0)
+                col.gameObject.layer = fireTargetLayer;
         }
 
-        // ─── Update ────────────────────────────────────────────────────
+        // ── Update ─────────────────────────────────────────────────────────────
 
         private void LateUpdate()
         {
             if (_extinguished) return;
 
-            if (_isBeingSprayed)
+            if (_isBeingSprayed && SweepGateOpen)
             {
                 _extinguishProgress += Time.deltaTime;
 
@@ -104,35 +125,31 @@ namespace Meta.XR.BuildingBlocks
             }
             else if (decayRate > 0f && _extinguishProgress > 0f)
             {
-                // Decay progress when not being sprayed
                 _extinguishProgress -= decayRate * Time.deltaTime;
                 _extinguishProgress = Mathf.Max(0f, _extinguishProgress);
             }
 
-            // Reset spray flag — ExtinguisherBehavior must call ApplyExtinguisher() each frame
             _isBeingSprayed = false;
 
             UpdateVisualFeedback();
         }
 
-        // ─── Public API (called by ExtinguisherBehavior) ───────────────
+        // ── Public API ─────────────────────────────────────────────────────────
 
-        /// <summary>
-        /// Call this every frame the extinguisher ray is hitting this fire.
-        /// </summary>
+        /// <summary>Call every frame the extinguisher spray is hitting this fire.</summary>
         public void ApplyExtinguisher()
         {
             if (_extinguished) return;
             _isBeingSprayed = true;
         }
 
-        // ─── Extinguish ────────────────────────────────────────────────
+        // ── Extinguish ─────────────────────────────────────────────────────────
 
         private void Extinguish()
         {
             _extinguished = true;
+            if (halo != null) halo.SetActive(false);
 
-            // Stop particles
             if (fireParticles != null)
             {
                 var emission = fireParticles.emission;
@@ -140,35 +157,29 @@ namespace Meta.XR.BuildingBlocks
                 fireParticles.Stop(true, ParticleSystemStopBehavior.StopEmitting);
             }
 
-            // Kill light
             if (fireLight != null)
                 fireLight.intensity = 0f;
 
-            // Play sound
             if (extinguishSound != null)
                 AudioSource.PlayClipAtPoint(extinguishSound, transform.position);
 
-            Debug.Log("[FireBehavior] Fire extinguished!");
+            Debug.Log($"[FireBehavior] '{name}' extinguished!");
 
-            // Notify controller (which will Destroy this GO)
-            //TODO RESTORE FUNCTIONALLITY
-            //  _controller.ReportFireExtinguished(gameObject);
+            _controller?.ReportFireExtinguished(gameObject);
         }
 
-        // ─── Visual Feedback ───────────────────────────────────────────
+        // ── Visual Feedback ────────────────────────────────────────────────────
 
         private void UpdateVisualFeedback()
         {
-            float t = 1f - ExtinguishPercent; // 1 = full fire, 0 = almost out
+            float t = 1f - ExtinguishPercent;
 
-            // Shrink particle emission
             if (fireParticles != null)
             {
                 var emission = fireParticles.emission;
                 emission.rateOverTime = _initialParticleRate * t;
             }
 
-            // Dim light
             if (fireLight != null)
                 fireLight.intensity = _initialLightIntensity * t;
         }
@@ -176,9 +187,14 @@ namespace Meta.XR.BuildingBlocks
 #if UNITY_EDITOR
         private void OnDrawGizmosSelected()
         {
-            // Show extinguish progress in editor
             Gizmos.color = Color.Lerp(Color.red, Color.green, ExtinguishPercent);
             Gizmos.DrawWireSphere(transform.position, 0.3f);
+
+            if (!SweepGateOpen)
+            {
+                Gizmos.color = new Color(1f, 0.5f, 0f, 0.5f);
+                Gizmos.DrawWireSphere(transform.position, 0.2f);
+            }
         }
 #endif
     }

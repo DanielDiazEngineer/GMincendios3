@@ -4,39 +4,22 @@ using UnityEngine.Events;
 namespace Meta.XR.BuildingBlocks
 {
     /// <summary>
-    /// Extinguisher spray logic for a REAL physical extinguisher tracked via OVR controller.
-    /// AutoHand dependency has been removed entirely.
+    /// Extinguisher spray logic. Input state (_isGrabbed, _isPinRemoved, _isTriggerHeld)
+    /// is set externally by HandTrackingExtinguisherTracker.
     ///
-    /// This component is now DUMB about input — all state flags (_isGrabbed, _isPinRemoved,
-    /// _isTriggerHeld) are SET EXTERNALLY by RealExtinguisherTracker. This script only
-    /// evaluates spray conditions, runs the raycast, and drives VFX/Audio.
-    ///
-    /// Setup on Extinguisher GO:
-    ///   ├─ RealExtinguisherTracker   ← drives the pose + sets state flags
-    ///   ├─ ExtinguisherBehavior      ← this script (spray logic only)
-    ///   └─ NozzleOrigin              ← child; RealExtinguisherTracker.nozzleAttachment
-    ///        ├─ SprayParticles (ParticleSystem)
-    ///        └─ SprayLine     (LineRenderer, optional)
-    ///
-    /// Events:
-    ///   OnPinRemoved    — first frame _isPinRemoved becomes true
-    ///   OnSprayStarted  — spray activates
-    ///   OnSprayStopped  — spray deactivates
+    /// Exposes LastSprayHitPoint / HasSprayHit for DeskFireBehavior sweep detection.
     /// </summary>
-    [RequireComponent(typeof(RealExtinguisherTracker))]
     public class ExtinguisherBehavior : MonoBehaviour
     {
-        // ═══════════════════════════════════════════════════════════════
-        // INSPECTOR
-        // ═══════════════════════════════════════════════════════════════
-
         [Header("Nozzle & Raycast")]
-        [Tooltip("Driven automatically by RealExtinguisherTracker. " +
-                 "Assign here too so the raycast origin is always available.")]
         public Transform nozzleOrigin;
 
         [SerializeField] private float maxSprayDistance = 5f;
+
+        [Tooltip("Cast against all layers — environment geometry blocks naturally. " +
+                 "Only FireBehavior hits trigger ApplyExtinguisher().")]
         [SerializeField] private LayerMask fireLayer = ~0;
+
         [SerializeField] private float sprayRadius = 0.1f;
 
         [Header("Spray VFX")]
@@ -47,7 +30,7 @@ namespace Meta.XR.BuildingBlocks
         [SerializeField] private AudioSource sprayAudio;
         [SerializeField] private AudioClip pinPullSound;
 
-        [Header("Gas Gauge (optional)")]
+        [Header("Gauge (optional)")]
         [SerializeField] private Transform gaugeRotator;
         [SerializeField] private float gaugeSpeed = 1f;
         [SerializeField] private float gaugeFactor = 1f;
@@ -58,10 +41,10 @@ namespace Meta.XR.BuildingBlocks
         public UnityEvent OnSprayStopped;
 
         [Header("Grab Requirement")]
-        [Tooltip("Uncheck when using a real physical extinguisher — no virtual grab needed.")]
-        [SerializeField] private bool requireGrab = true;
+        [Tooltip("Uncheck when using hand-tracking — no virtual grab needed.")]
+        [SerializeField] private bool requireGrab = false;
 
-        [Tooltip("Gate controlled externally — set to true once intro is complete.")]
+        [Tooltip("Set true by leveldemonew.CompleteIntro() after the intro sequence.")]
         [HideInInspector] public bool shootingEnabled = false;
 
         [Header("UI Hint (optional)")]
@@ -69,31 +52,33 @@ namespace Meta.XR.BuildingBlocks
 
         [HideInInspector] public bool _controllerTriggerHeld;
 
-        // ═══════════════════════════════════════════════════════════════
-        // STATE — written by RealExtinguisherTracker, read here
-        // ═══════════════════════════════════════════════════════════════
+        // ── State — written by tracker, read here ──────────────────────────────
 
-        /// <summary>Set by RealExtinguisherTracker when controller is connected/disconnected.</summary>
         [HideInInspector] public bool _isGrabbed;
-
-        /// <summary>Set by RealExtinguisherTracker when pin button is pressed (or forced).</summary>
         [HideInInspector] public bool _isPinRemoved;
-
-        /// <summary>Set by RealExtinguisherTracker from index trigger axis.</summary>
         [HideInInspector] public bool _isTriggerHeld;
 
-        // Internal
         public bool _isSpraying { get; private set; }
         private bool _pinWasRemoved = false;
         private FireBehavior _currentTarget;
+
+        /// <summary>World-space point where the SphereCast last hit a fire collider.</summary>
+        public Vector3 LastSprayHitPoint { get; private set; }
+
+        /// <summary>True when spraying AND the cast hit a fire collider this frame.</summary>
+        public bool HasSprayHit { get; private set; }
 
         public bool IsGrabbed => _isGrabbed;
         public bool IsPinRemoved => _isPinRemoved;
         public bool IsSpraying => _isSpraying;
 
-        // ═══════════════════════════════════════════════════════════════
-        // LIFECYCLE
-        // ═══════════════════════════════════════════════════════════════
+        public bool IsAimingAtFire { get; private set; }
+
+        public float CurrentTargetProgress => 
+    _currentTarget != null ? _currentTarget.ExtinguishPercent : 0f;
+public bool HasTarget => _currentTarget != null && !_currentTarget.IsExtinguished;
+
+        // ── Lifecycle ──────────────────────────────────────────────────────────
 
         private void Start()
         {
@@ -111,7 +96,9 @@ namespace Meta.XR.BuildingBlocks
 
         private void Update()
         {
-            // ── Pin removal edge detection ───────────────────────────────────
+            HasSprayHit = false;
+
+            // ── Pin removal ────────────────────────────────────────────────────
             if (_isPinRemoved && !_pinWasRemoved)
             {
                 _pinWasRemoved = true;
@@ -124,21 +111,25 @@ namespace Meta.XR.BuildingBlocks
                 UpdateHint();
             }
 
-            // ── Spray state machine ──────────────────────────────────────────
-            //  bool shouldSpray = shootingEnabled && (!requireGrab || _isGrabbed) && _isPinRemoved && _isTriggerHeld;
+            IsAimingAtFire = false;
+            if (nozzleOrigin != null && Physics.SphereCast(
+                    nozzleOrigin.position, sprayRadius, nozzleOrigin.forward,
+                    out var aimHit, maxSprayDistance, fireLayer, QueryTriggerInteraction.Collide))
+            {
+                IsAimingAtFire = aimHit.collider.GetComponentInParent<FireBehavior>() != null;
+            }
 
-            bool shouldSpray = shootingEnabled && (!requireGrab || _isGrabbed) && _isPinRemoved
-                   && (_isTriggerHeld || _controllerTriggerHeld);
-
-
-
+            // ── Spray state machine ────────────────────────────────────────────
+            bool shouldSpray = shootingEnabled
+                && (!requireGrab || _isGrabbed)
+                && _isPinRemoved
+                && (_isTriggerHeld || _controllerTriggerHeld);
 
             if (shouldSpray && !_isSpraying)
                 StartSpray();
             else if (!shouldSpray && _isSpraying)
                 StopSpray();
 
-            // ── Per-frame spray logic ────────────────────────────────────────
             if (_isSpraying)
             {
                 DoSprayRaycast();
@@ -146,16 +137,14 @@ namespace Meta.XR.BuildingBlocks
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // SPRAY
-        // ═══════════════════════════════════════════════════════════════
+        // ── Spray ──────────────────────────────────────────────────────────────
 
         private void StartSpray()
         {
             _isSpraying = true;
             SetSprayActive(true);
             OnSprayStarted?.Invoke();
-            Debug.Log("[Extinguisher] Spraying!");
+           // Debug.Log("[Extinguisher] Spraying!");
         }
 
         private void StopSpray()
@@ -163,6 +152,7 @@ namespace Meta.XR.BuildingBlocks
             if (!_isSpraying) return;
             _isSpraying = false;
             _currentTarget = null;
+            HasSprayHit = false;
             SetSprayActive(false);
             OnSprayStopped?.Invoke();
         }
@@ -189,11 +179,14 @@ namespace Meta.XR.BuildingBlocks
                 var fire = hit.collider.GetComponentInParent<FireBehavior>();
                 if (fire != null && !fire.IsExtinguished)
                 {
+                    HasSprayHit = true;
+                    LastSprayHitPoint = hit.point;
                     fire.ApplyExtinguisher();
                     _currentTarget = fire;
                 }
                 else
                 {
+                    // Hit environment geometry (barrel wall, desk surface, etc.) — blocked
                     _currentTarget = null;
                 }
             }
@@ -203,9 +196,7 @@ namespace Meta.XR.BuildingBlocks
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // GAUGE / VFX / AUDIO
-        // ═══════════════════════════════════════════════════════════════
+        // ── Gauge / VFX / Audio ────────────────────────────────────────────────
 
         private void UpdateGauge()
         {
@@ -231,9 +222,7 @@ namespace Meta.XR.BuildingBlocks
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // HINTS
-        // ═══════════════════════════════════════════════════════════════
+        // ── Hints ──────────────────────────────────────────────────────────────
 
         private void UpdateHint()
         {
@@ -247,9 +236,7 @@ namespace Meta.XR.BuildingBlocks
                 hintText.text = "Apunta a la base del fuego\ny aprieta el gatillo";
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // RESET
-        // ═══════════════════════════════════════════════════════════════
+        // ── Reset ──────────────────────────────────────────────────────────────
 
         public void ResetExtinguisher()
         {
@@ -261,10 +248,6 @@ namespace Meta.XR.BuildingBlocks
             UpdateHint();
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // GIZMOS
-        // ═══════════════════════════════════════════════════════════════
-
 #if UNITY_EDITOR
         private void OnDrawGizmos()
         {
@@ -275,10 +258,10 @@ namespace Meta.XR.BuildingBlocks
                          : Color.gray;
             Gizmos.DrawRay(nozzleOrigin.position, nozzleOrigin.forward * maxSprayDistance);
 
-            if (_currentTarget != null)
+            if (HasSprayHit)
             {
-                Gizmos.color = Color.yellow;
-                Gizmos.DrawWireSphere(_currentTarget.transform.position, 0.2f);
+                Gizmos.color = Color.green;
+                Gizmos.DrawWireSphere(LastSprayHitPoint, sprayRadius);
             }
         }
 #endif

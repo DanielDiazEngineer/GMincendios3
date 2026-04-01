@@ -5,9 +5,12 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
-  - enabled: 1
+  - enabled: 0
     path: Assets/minimalfirewithhandtrack.unity
     guid: d9951118caaf82e42a413c3aab24b9b3
+  - enabled: 1
+    path: Assets/minimalfirewithhandtrackVersion2.unity
+    guid: b7e4bd4625a797e40b959236593e6fc3
   m_configObjects:
     Unity.XR.Oculus.Settings: {fileID: 11400000, guid: 3d2dede88061f3544a4106115d174cd5, type: 2}
     com.unity.xr.management.loader_settings: {fileID: 11400000, guid: ec44428ad698b4542806894637abb223, type: 2}
