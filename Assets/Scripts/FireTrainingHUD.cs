@@ -44,8 +44,8 @@ namespace Meta.XR.BuildingBlocks
         [SerializeField] private float idealMaxDistance = 3.5f;
 
         [SerializeField] private Color tooCloseColor = new Color(0.9f, 0.2f, 0.2f);
-        [SerializeField] private Color idealColor    = new Color(1.0f, 0.85f, 0.0f);
-        [SerializeField] private Color tooFarColor   = Color.white;
+        [SerializeField] private Color idealColor = new Color(1.0f, 0.85f, 0.0f);
+        [SerializeField] private Color tooFarColor = Color.white;
 
         [Header("Win Panel")]
         [SerializeField] private GameObject winPanel;
@@ -62,6 +62,11 @@ namespace Meta.XR.BuildingBlocks
         [SerializeField] private float shootEnableDelay = 1.5f;
         [SerializeField] private float aimHoldDuration = 1.5f;
         private float _aimHoldTimer = 0f;
+        [Tooltip("Seconds of aim dropout allowed before hold timer resets.")]
+        [SerializeField] private float aimDropoutTolerance = 0.25f;
+        private float _aimDropoutTimer = 0f;
+        [Tooltip("If player never aims, auto-advance from step 2 to step 3 after this many seconds. 0 = disabled.")]
+        [SerializeField] private float step2MaxDuration = 5f;
 
         // ── State ──────────────────────────────────────────────────────────────
 
@@ -88,15 +93,21 @@ namespace Meta.XR.BuildingBlocks
             if (!_active || _step == Step.Done) return;
 
             // Step 2 → 3: extinguisher aimed at fire
-            if (_step == Step.S2_AimAtFire && extinguisher != null && extinguisher.IsAimingAtFire)
+            if (_step == Step.S2_AimAtFire && extinguisher != null)
             {
-                _aimHoldTimer += Time.deltaTime;
-                if (_aimHoldTimer >= aimHoldDuration)
-                    GoToStep(Step.S3_Spray);
-            }
-            else
-            {
-                _aimHoldTimer = 0f; // reset if they look away
+                if (extinguisher.IsAimingAtFire)
+                {
+                    _aimDropoutTimer = 0f;
+                    _aimHoldTimer += Time.deltaTime;
+                    if (_aimHoldTimer >= aimHoldDuration)
+                        GoToStep(Step.S3_Spray);
+                }
+                else
+                {
+                    _aimDropoutTimer += Time.deltaTime;
+                    if (_aimDropoutTimer >= aimDropoutTolerance)
+                        _aimHoldTimer = 0f; // only reset after sustained non-aim
+                }
             }
 
             UpdateDistanceHUD();
@@ -162,16 +173,19 @@ namespace Meta.XR.BuildingBlocks
             _step = target;
             switch (target)
             {
-                case Step.S1_RemovePin:  SetStepPanels(true,  false, false); break;
-               case Step.S2_AimAtFire:
+                case Step.S1_RemovePin: SetStepPanels(true, false, false); break;
+                case Step.S2_AimAtFire:
                     SetStepPanels(false, true, false);
-                    _aimHoldTimer = 0f; // add this
+                    _aimHoldTimer = 0f;
+                    _aimDropoutTimer = 0f;
+                    if (step2MaxDuration > 0f)
+                        StartCoroutine(Step2MaxDelaySkip());
                     break;
-                case Step.S3_Spray:     
-                    SetStepPanels(false, false, true); 
+                case Step.S3_Spray:
+                    SetStepPanels(false, false, true);
                     StartCoroutine(EnableShootingAfterDelay());
-                    break; 
-                case Step.Done:          SetStepPanels(false, false, false); break;
+                    break;
+                case Step.Done: SetStepPanels(false, false, false); break;
             }
         }
 
@@ -180,6 +194,16 @@ namespace Meta.XR.BuildingBlocks
             if (step1Panel != null) step1Panel.SetActive(s1);
             if (step2Panel != null) step2Panel.SetActive(s2);
             if (step3Panel != null) step3Panel.SetActive(s3);
+        }
+
+        private IEnumerator Step2MaxDelaySkip()
+        {
+            yield return new WaitForSeconds(step2MaxDuration);
+            if (_active && _step == Step.S2_AimAtFire)
+            {
+                Debug.Log("[FireTrainingHUD] Step 2 max delay reached — auto-advancing to step 3.");
+                GoToStep(Step.S3_Spray);
+            }
         }
 
         private IEnumerator EnableShootingAfterDelay()
@@ -192,7 +216,7 @@ namespace Meta.XR.BuildingBlocks
 
         // ── Distance HUD ───────────────────────────────────────────────────────
 
-        private void UpdateDistanceHUD()  
+        private void UpdateDistanceHUD()
         {
             if (distanceText == null || playerHead == null) return;
 
@@ -215,7 +239,7 @@ namespace Meta.XR.BuildingBlocks
                 distanceText.color = idealColor;
             else
                 distanceText.color = tooFarColor;
-        
+
 
 
 
@@ -227,21 +251,21 @@ namespace Meta.XR.BuildingBlocks
                     float pct = extinguisher.CurrentTargetProgress * 100f;
                     sprayProgressText.gameObject.SetActive(true);
                     sprayProgressText.text = $"Extinción: {pct:F0}%";
-                    sprayProgressText.color = Color.Lerp(Color.red, Color.green, 
+                    sprayProgressText.color = Color.Lerp(Color.red, Color.green,
                                                         extinguisher.CurrentTargetProgress);
                 }
                 else
                 {
                     sprayProgressText.gameObject.SetActive(false);
                 }
-            }   
+            }
         }
 
         public void RegisterFire(FireBehavior fb)
-            {
-                if (fb != null && !_allFires.Contains(fb))
-                    _allFires.Add(fb);
-            }
+        {
+            if (fb != null && !_allFires.Contains(fb))
+                _allFires.Add(fb);
+        }
 
         // ── Win ────────────────────────────────────────────────────────────────
 

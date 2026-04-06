@@ -73,10 +73,12 @@ namespace Meta.XR.BuildingBlocks
         public bool IsSpraying => _isSpraying;
 
         public bool IsAimingAtFire { get; private set; }
+        [Tooltip("Max distance for IsAimingAtFire detection. Defaults to maxSprayDistance if 0.")]
+        [SerializeField] private float aimDetectionDistance = 0f;
 
-        public float CurrentTargetProgress => 
+        public float CurrentTargetProgress =>
     _currentTarget != null ? _currentTarget.ExtinguishPercent : 0f;
-public bool HasTarget => _currentTarget != null && !_currentTarget.IsExtinguished;
+        public bool HasTarget => _currentTarget != null && !_currentTarget.IsExtinguished;
 
         // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -112,9 +114,10 @@ public bool HasTarget => _currentTarget != null && !_currentTarget.IsExtinguishe
             }
 
             IsAimingAtFire = false;
+            float aimDist = aimDetectionDistance > 0f ? aimDetectionDistance : maxSprayDistance;
             if (nozzleOrigin != null && Physics.SphereCast(
                     nozzleOrigin.position, sprayRadius, nozzleOrigin.forward,
-                    out var aimHit, maxSprayDistance, fireLayer, QueryTriggerInteraction.Collide))
+                    out var aimHit, aimDist, fireLayer, QueryTriggerInteraction.Collide))
             {
                 IsAimingAtFire = aimHit.collider.GetComponentInParent<FireBehavior>() != null;
             }
@@ -144,7 +147,7 @@ public bool HasTarget => _currentTarget != null && !_currentTarget.IsExtinguishe
             _isSpraying = true;
             SetSprayActive(true);
             OnSprayStarted?.Invoke();
-           // Debug.Log("[Extinguisher] Spraying!");
+            // Debug.Log("[Extinguisher] Spraying!");
         }
 
         private void StopSpray()
