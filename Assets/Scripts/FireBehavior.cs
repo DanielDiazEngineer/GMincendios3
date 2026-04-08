@@ -11,9 +11,17 @@ namespace Meta.XR.BuildingBlocks
     ///
     /// Desk zone setup: DeskFireBehavior sets SweepGateOpen each frame.
     /// Progress only accumulates when that gate is open (nozzle moving laterally).
+    ///
+    /// Multi-PS setup: assign all particle systems to allFireParticles[].
+    /// If left empty, AutoSetup will find all PS children automatically.
+    /// Each PS can be faded independently via the Fade Behaviour checkboxes.
+    /// Recommended for texture-sheet fires: fadeEmissionRate = false,
+    /// fadeStartSize = false, fadeLifetime = true.
     /// </summary>
     public class FireBehavior : MonoBehaviour
     {
+        // ── Inspector ──────────────────────────────────────────────────────────
+
         [Header("Extinguishing")]
         [Tooltip("Seconds of continuous spray needed to extinguish.")]
         [SerializeField] private float timeToExtinguish = 3f;
@@ -26,9 +34,36 @@ namespace Meta.XR.BuildingBlocks
                  "Leave at 0 unless you have a specific reason to separate layers.")]
         [SerializeField] private int fireTargetLayer = 0;
 
-        [Header("Visual Feedback")]
-        [SerializeField] public ParticleSystem fireParticles;
+        [Header("Visual Feedback — Particle Systems")]
+        [Tooltip("All particle systems that make up this fire. " +
+                 "Leave empty to auto-discover all PS children on Start.")]
+        [SerializeField] private ParticleSystem[] allFireParticles;
+
+        [Tooltip("Optional point light that dims as fire is suppressed.")]
         [SerializeField] private Light fireLight;
+
+        [Header("Fade Behaviour")]
+        [Tooltip("Scale emission rate down as fire is suppressed. " +
+                 "Disable for large sparse-emitter fires — looks unnatural.")]
+        [SerializeField] private bool fadeEmissionRate = false;
+
+        [Tooltip("Scale startSize down as fire is suppressed. " +
+                 "Causes particles to shrink from their centre — use fadeLifetime instead for bottom-anchored feel.")]
+        [SerializeField] private bool fadeStartSize = false;
+
+        [Tooltip("Scale startLifetime (and startSpeed) down as fire is suppressed. " +
+                 "Particles don't travel as high → fire height drops while base stays anchored. " +
+                 "Best option for texture-sheet fires.")]
+        [SerializeField] private bool fadeLifetime = true;
+
+        [Tooltip("Minimum size multiplier when fully suppressed (0 = off, 1 = no change).")]
+        [Range(0f, 1f)]
+        [SerializeField] private float minSizePercent = 0.3f;
+
+        [Tooltip("Minimum lifetime multiplier when fully suppressed (0 = off, 1 = no change).")]
+        [Range(0f, 1f)]
+        [SerializeField] private float minLifetimePercent = 0.2f;
+
         [Header("Halo")]
         [SerializeField] private GameObject halo;
 
@@ -42,7 +77,12 @@ namespace Meta.XR.BuildingBlocks
         private bool _isBeingSprayed = false;
         private bool _extinguished = false;
 
-        private float _initialParticleRate;
+        // Per-PS initial values captured on AutoSetup
+        private float[] _initialParticleRates;
+        private float[] _initialStartSizes;
+        private float[] _initialLifetimes;
+        private float[] _initialSpeeds;
+
         private float _initialLightIntensity;
 
         /// <summary>
@@ -73,16 +113,31 @@ namespace Meta.XR.BuildingBlocks
 
         private void AutoSetup()
         {
-            if (fireParticles == null)
-                fireParticles = GetComponentInChildren<ParticleSystem>();
+            // Discover particle systems if not assigned
+            if (allFireParticles == null || allFireParticles.Length == 0)
+                allFireParticles = GetComponentsInChildren<ParticleSystem>();
 
             if (fireLight == null)
                 fireLight = GetComponentInChildren<Light>();
 
-            if (fireParticles != null)
+            // Capture initial values per PS
+            int count = allFireParticles.Length;
+            _initialParticleRates = new float[count];
+            _initialStartSizes    = new float[count];
+            _initialLifetimes     = new float[count];
+            _initialSpeeds        = new float[count];
+
+            for (int i = 0; i < count; i++)
             {
-                var emission = fireParticles.emission;
-                _initialParticleRate = emission.rateOverTime.constant;
+                if (allFireParticles[i] == null) continue;
+
+                var em   = allFireParticles[i].emission;
+                var main = allFireParticles[i].main;
+
+                _initialParticleRates[i] = em.rateOverTime.constant;
+                _initialStartSizes[i]    = main.startSize.constant;
+                _initialLifetimes[i]     = main.startLifetime.constant;
+                _initialSpeeds[i]        = main.startSpeed.constant;
             }
 
             if (fireLight != null)
@@ -97,8 +152,8 @@ namespace Meta.XR.BuildingBlocks
             if (col == null)
             {
                 var box = gameObject.AddComponent<BoxCollider>();
-                box.size = new Vector3(0.3f, 0.4f, 0.3f);
-                box.center = new Vector3(0f, 0.2f, 0f);
+                box.size   = new Vector3(0.3f, 0.4f, 0.3f);
+                box.center = new Vector3(0f,   0.2f, 0f);
                 col = box;
                 Debug.Log($"[FireBehavior] Auto-added BoxCollider on '{name}'.");
             }
@@ -126,7 +181,7 @@ namespace Meta.XR.BuildingBlocks
             else if (decayRate > 0f && _extinguishProgress > 0f)
             {
                 _extinguishProgress -= decayRate * Time.deltaTime;
-                _extinguishProgress = Mathf.Max(0f, _extinguishProgress);
+                _extinguishProgress  = Mathf.Max(0f, _extinguishProgress);
             }
 
             _isBeingSprayed = false;
@@ -148,13 +203,17 @@ namespace Meta.XR.BuildingBlocks
         private void Extinguish()
         {
             _extinguished = true;
-            if (halo != null) halo.SetActive(false);
 
-            if (fireParticles != null)
+            if (halo != null)
+                halo.SetActive(false);
+
+            // Hard-stop all particle systems
+            foreach (var ps in allFireParticles)
             {
-                var emission = fireParticles.emission;
-                emission.rateOverTime = 0f;
-                fireParticles.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+                if (ps == null) continue;
+                var em = ps.emission;
+                em.rateOverTime = 0f;
+                ps.Stop(true, ParticleSystemStopBehavior.StopEmitting);
             }
 
             if (fireLight != null)
@@ -172,17 +231,37 @@ namespace Meta.XR.BuildingBlocks
 
         private void UpdateVisualFeedback()
         {
+            // t: 1.0 = fire at full strength, 0.0 = nearly extinguished
             float t = 1f - ExtinguishPercent;
 
-            if (fireParticles != null)
+            for (int i = 0; i < allFireParticles.Length; i++)
             {
-                var emission = fireParticles.emission;
-                emission.rateOverTime = _initialParticleRate * t;
+                if (allFireParticles[i] == null) continue;
+
+                var em   = allFireParticles[i].emission;
+                var main = allFireParticles[i].main;
+
+                if (fadeEmissionRate)
+                    em.rateOverTime = _initialParticleRates[i] * t;
+
+                if (fadeStartSize)
+                    main.startSize = _initialStartSizes[i] * Mathf.Lerp(minSizePercent, 1f, t);
+
+                if (fadeLifetime)
+                {
+                    // Shorter lifetime = particles don't travel as high = fire shrinks from top,
+                    // base stays anchored at emitter position. Pairs well with texture-sheet animation.
+                    float lifeT = Mathf.Lerp(minLifetimePercent, 1f, t);
+                    main.startLifetime = _initialLifetimes[i] * lifeT;
+                    main.startSpeed    = _initialSpeeds[i]    * lifeT;
+                }
             }
 
             if (fireLight != null)
                 fireLight.intensity = _initialLightIntensity * t;
         }
+
+        // ── Editor Gizmos ──────────────────────────────────────────────────────
 
 #if UNITY_EDITOR
         private void OnDrawGizmosSelected()

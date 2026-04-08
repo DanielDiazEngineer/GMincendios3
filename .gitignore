@@ -11,6 +11,18 @@
 
 .vscode/
 .vscode
+.vscode/
+.vscode/settings.json
+
+# Generated Android plugin files
+Assets/Plugins/Android/
+Assets/Plugins/Android.meta
+Assets/Plugins/Android/**/AndroidManifest.xml
+Assets/Plugins/Android/**/AndroidManifest.xml.meta
+
+# Android build artifacts
+*.apk
+*.aab
 
 # Reimportable Asset Store / UPM-unpacked packages
 Assets/TextMesh Pro/
