@@ -66,6 +66,13 @@ public class PanelNavigator : MonoBehaviour
         }
     }
 
+    private void OnDisable()
+{
+    StopAllCoroutines();
+    isTransitioning = false;
+    lastClickTime = -999f;
+}
+
     private void SetupPanelClickDetection()
     {
         foreach (GameObject panel in panels)
@@ -100,6 +107,8 @@ public class PanelNavigator : MonoBehaviour
 
     public void GoToNextPanel()
     {
+       if (!isActiveAndEnabled) return;
+
         if (Time.time - lastClickTime < clickCooldown || isTransitioning)
         {
             Debug.Log("Click too fast! Please wait.");

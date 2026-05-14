@@ -2,6 +2,7 @@ using System.Collections;
 using Meta.XR.BuildingBlocks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using Autohand;
 
 /// <summary>
 /// Scene controller for the fire training demo.
@@ -30,6 +31,8 @@ public class leveldemonew : MonoBehaviour
 
     [Header("HUD")]
     public FireTrainingHUD hud;
+    public GameObject canvashud;
+    public GameObject canvasintropanels;
 
     [Header("Intro Canvas")]
     public GameObject canvasconato;
@@ -40,6 +43,12 @@ public class leveldemonew : MonoBehaviour
     [Header("Scene Restart")]
     [Tooltip("Hold joystick down for this many seconds to restart.")]
     public float restartHoldTime = 2f;
+
+     [Header("menu panel")]
+    public GameObject canvasmenu;
+    public ResetBall menuball;
+    [SerializeField] private MetaHandPinchEvent pinchEvent;
+
 
     // ── State ──────────────────────────────────────────────────────────────────
 
@@ -55,6 +64,8 @@ public class leveldemonew : MonoBehaviour
     void Start()
     {
         _audio = GetComponent<AudioSource>();
+
+          canvasmenu.SetActive(false);
     }
 
     void Update()
@@ -169,7 +180,7 @@ public class leveldemonew : MonoBehaviour
         Debug.Log($"[leveldemo] Fires done: {_firesDone}/{_totalFires}");
 
         if (_firesDone >= _totalFires)
-        {
+        {   menuball.OnLevelCleared(); // Start the "pinch me" pulse on the ball
             Debug.Log("[leveldemo] ALL FIRES OUT — training complete!");
             if (hud != null)
                 hud.TriggerWin(); // HUD owns the win panel
@@ -192,9 +203,38 @@ public class leveldemonew : MonoBehaviour
         }
     }
 
-    private void RestartScene()
+    public void RestartScene() // Call from UI button or HandleRestartInput()
     {
         Debug.Log("[leveldemo] Restarting scene.");
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
+
+    public void OpenMenuPause()
+    {
+        if (canvasmenu != null)
+        {
+            canvasmenu.SetActive(true);
+            //Time.timeScale = 0f; // Pause the game
+
+            canvashud.SetActive(false); // Hide the HUD when the menu is open
+            canvasintropanels.SetActive(false); // Hide the intro panels when the menu is open
+
+              if (pinchEvent != null) pinchEvent.Disabled = true;
+        }
+    }
+
+    public void CloseMenuResume()
+    {
+        if (canvasmenu != null)
+        {
+            canvasmenu.SetActive(false);
+            //Time.timeScale = 1f; // Resume the game
+            canvashud.SetActive(true); // Show the HUD when the menu is closed
+            canvasintropanels.SetActive(true); // Show the intro panels when the menu is closed
+
+                if (pinchEvent != null) pinchEvent.Disabled = false;
+
+        }
     }
 }
