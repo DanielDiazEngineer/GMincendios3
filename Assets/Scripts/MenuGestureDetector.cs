@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.Serialization;
 using Autohand;
 
 /// <summary>
@@ -9,7 +10,9 @@ using Autohand;
 ///
 /// Recommended setup:
 ///   - Attach to a GameObject that also has (or references) a MetaHandFingerGestureTracker
-///   - Set isLeftHandOnly = true to further avoid system gesture conflicts
+///   - Set restrictToOneHand = true to further avoid system gesture conflicts
+///   - menuHandIsLeft picks which hand (DominantHandSetting keeps it on the
+///     non-dominant hand so it never fights the extinguisher trigger)
 ///   - Wire OnMenuGestureTriggered in the Inspector
 /// </summary>
 public class MenuGestureDetector : MonoBehaviour
@@ -21,8 +24,13 @@ public class MenuGestureDetector : MonoBehaviour
     [Tooltip("Seconds both fingers must pinch before triggering. 0.3–0.5 feels natural.")]
     public float holdDuration = 0.35f;
 
-    [Tooltip("Restrict to left hand only (recommended — avoids system gesture zone)")]
-    public bool isLeftHandOnly = true;
+    [Tooltip("Only listen to one hand (recommended — avoids system gesture zone)")]
+    [FormerlySerializedAs("isLeftHandOnly")]
+    public bool restrictToOneHand = true;
+
+    [Tooltip("Which hand opens the menu when restrictToOneHand is on. " +
+             "Should be the non-dominant (nozzle) hand.")]
+    public bool menuHandIsLeft = true;
 
     [Header("Events")]
     public UnityEvent OnMenuGestureTriggered;
@@ -59,8 +67,8 @@ public class MenuGestureDetector : MonoBehaviour
                           MetaHandFingerGestureTracker tracker,
                           FingerTouchEventArgs e)
     {
-        // Optional: ignore right hand entirely
-        if (isLeftHandOnly && !hand.hand.left) return;
+        // Optional: ignore the other hand entirely
+        if (!IsMenuHand(hand)) return;
 
         if (IsIndexThumb(e)) _indexOnThumb = true;
         if (IsMiddleThumb(e)) _middleOnThumb = true;
@@ -72,7 +80,7 @@ public class MenuGestureDetector : MonoBehaviour
                          MetaHandFingerGestureTracker tracker,
                          FingerTouchEventArgs e)
     {
-        if (isLeftHandOnly && !hand.hand.left) return;
+        if (!IsMenuHand(hand)) return;
 
         if (IsIndexThumb(e)) _indexOnThumb = false;
         if (IsMiddleThumb(e)) _middleOnThumb = false;
@@ -112,6 +120,23 @@ public class MenuGestureDetector : MonoBehaviour
             OnMenuGestureTriggered?.Invoke();
         }
     }
+
+    // ── hand selection ──────────────────────────────────────────
+    /// <summary>Move the menu gesture to the other hand. Clears any half-made pinch.</summary>
+    public void SetMenuHandLeft(bool left)
+    {
+        if (menuHandIsLeft == left) return;
+
+        menuHandIsLeft = left;
+        _indexOnThumb = false;
+        _middleOnThumb = false;
+        _gestureActive = false;
+        _hasTriggered = false;
+        Debug.Log($"[MenuGesture] Menu hand set to: {(left ? "Left" : "Right")}");
+    }
+
+    bool IsMenuHand(MetaXRAutoHandTracking hand) =>
+        !restrictToOneHand || hand.hand.left == menuHandIsLeft;
 
     // ── pair helpers (order-independent) ───────────────────────
     static bool IsIndexThumb(FingerTouchEventArgs e) =>

@@ -147,6 +147,7 @@ namespace Meta.XR.BuildingBlocks
         public bool NozzleHandTracked { get; private set; }
         public bool BothHandsTracked => GrabberHandTracked && NozzleHandTracked;
         public float GrabberClosedness { get; private set; }
+        public bool DominantHandIsRight => dominantHandIsRight;
 
         private OVRHand GrabberHand => dominantHandIsRight ? ovrHandRight : ovrHandLeft;
         private OVRHand NozzleHand => dominantHandIsRight ? ovrHandLeft : ovrHandRight;
@@ -524,7 +525,10 @@ namespace Meta.XR.BuildingBlocks
         /// </summary>
         public void SetDominantHand(bool rightIsDominant)
         {
+            if (dominantHandIsRight == rightIsDominant) return;
+
             dominantHandIsRight = rightIsDominant;
+            _lastPressTime = -999f;   // no spray carried over from the old grabber hand
             if (logStateChanges)
                 Debug.Log($"[HandExtTracker] Dominant hand set to: {(rightIsDominant ? "Right" : "Left")}");
         }
