@@ -16108,8 +16108,8 @@ MonoBehaviour:
   ovrHandLeft: {fileID: 1907650889}
   ovrSkeletonRight: {fileID: 1295628459}
   ovrSkeletonLeft: {fileID: 1621376976}
-  thumbCurlThreshold: 0.86
-  minFingerBendForThumb: 0.26
+  thumbCurlThreshold: 0.84
+  minFingerBendForThumb: 0.24
   dominantHandIsRight: 1
   aimMode: 1
   nozzleAttachment: {fileID: 7922578544944937321}
@@ -16117,6 +16117,8 @@ MonoBehaviour:
   grabThreshold: 0.48
   requireHandProximity: 0
   maxHandDistance: 5.17
+  releaseGraceTime: 0.15
+  nozzleRequiresHighConfidence: 0
   aimSmoothSpeed: 20
   requirePinRemoval: 0
   extinguisher: {fileID: 457520615}

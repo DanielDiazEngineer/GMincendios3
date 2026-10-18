@@ -10,7 +10,16 @@ namespace Meta.XR.BuildingBlocks
     ///   Nozzle hand             = on the hose   → aim direction
     ///
     /// SPRAY IS BINARY — all conditions must be true simultaneously or
-    /// nothing activates. No partial states, no grace periods.
+    /// nothing activates. No partial states.
+    ///
+    /// HOTFIX (2026-10):
+    ///   1. Finger gate now reads the GRABBER hand's skeleton (was hard-coded
+    ///      to right) → left-hand trigger / right-hand nozzle works.
+    ///   2. Release-only grace (releaseGraceTime). Activation is unchanged;
+    ///      spray just stops a few frames later. Set to 0 = original behaviour.
+    ///   3. Nozzle hand only needs to be tracked (any confidence) for spray
+    ///      while nozzleRequiresHighConfidence is false. Aim still freezes on
+    ///      Low confidence. Set to true = original behaviour.
     ///
     /// ── AIM ──────────────────────────────────────────────────────────
     /// Both tracked  → direction = vector from grabber hand → nozzle hand
@@ -98,6 +107,14 @@ namespace Meta.XR.BuildingBlocks
         [SerializeField] private bool requireHandProximity = false;
         [SerializeField] private float maxHandDistance = 0.6f;
 
+        [Header("Hotfix — set grace 0 + nozzle High ON to revert")]
+        [Tooltip("Spray keeps going this long (seconds) after the gesture or tracking drops. " +
+                 "Activation is NOT affected. 0 = original behaviour.")]
+        [SerializeField] private float releaseGraceTime = 0.15f;
+        [Tooltip("ON = original: spray needs High confidence on the nozzle hand.\n" +
+                 "OFF = nozzle hand only needs to be tracked (aim still freezes on Low).")]
+        [SerializeField] private bool nozzleRequiresHighConfidence = false;
+
         [Header("Aim Smoothing")]
         [Tooltip("Higher = more responsive, lower = smoother. 20 is a good start.")]
         [SerializeField] private float aimSmoothSpeed = 20f;
@@ -124,6 +141,7 @@ namespace Meta.XR.BuildingBlocks
         private Vector3 _smoothedAimDirection = Vector3.forward;
         private Vector3 _frozenAimDirection = Vector3.forward;
         private bool _wasTracking = false;
+        private float _lastPressTime = -999f;   // HOTFIX: release grace
 
         public bool GrabberHandTracked { get; private set; }
         public bool NozzleHandTracked { get; private set; }
@@ -153,6 +171,8 @@ namespace Meta.XR.BuildingBlocks
 
         private void OnEnable()
         {
+            _lastPressTime = -999f;   // HOTFIX: no leftover grace after re-enable
+
             if (extinguisher != null)
             {
                 extinguisher._isGrabbed = true;
@@ -291,30 +311,40 @@ namespace Meta.XR.BuildingBlocks
         {
             if (extinguisher == null) return;
 
-            // Condition 1: both hands must be tracked
-            if (!BothHandsTracked)
+            // Condition 1: grabber High confidence (gesture is read from it) +
+            // nozzle hand tracked (High only if nozzleRequiresHighConfidence)
+            bool nozzleOk = nozzleRequiresHighConfidence
+                ? NozzleHandTracked
+                : NozzleHand != null && NozzleHand.IsTracked;
+
+            bool pressedNow = false;
+
+            if (GrabberHandTracked && nozzleOk)
             {
-                extinguisher._isTriggerHeld = false;
-                return;
+                // Condition 2: grabber hand must be sufficiently closed
+                // GrabberClosedness = GetHandClosedness(GrabberHand);
+                // bool handClosed = GrabberClosedness >= grabThreshold;
+                bool handClosed = IsThumbPressingDown(GrabberHand);
+
+                // Condition 3 (optional): hands must be close enough to each other
+                bool proximityOk = true;
+                if (requireHandProximity)
+                {
+                    float dist = Vector3.Distance(
+                        GrabberHand.transform.position,
+                        NozzleHand.transform.position);
+                    proximityOk = dist <= maxHandDistance;
+                }
+
+                // All conditions must be true simultaneously — no partial activation
+                pressedNow = handClosed && proximityOk;
             }
 
-            // Condition 2: grabber hand must be sufficiently closed
-            // GrabberClosedness = GetHandClosedness(GrabberHand);
-            // bool handClosed = GrabberClosedness >= grabThreshold;
-            bool handClosed = IsThumbPressingDown(GrabberHand);
+            if (pressedNow) _lastPressTime = Time.time;
 
-            // Condition 3 (optional): hands must be close enough to each other
-            bool proximityOk = true;
-            if (requireHandProximity)
-            {
-                float dist = Vector3.Distance(
-                    GrabberHand.transform.position,
-                    NozzleHand.transform.position);
-                proximityOk = dist <= maxHandDistance;
-            }
-
-            // All conditions must be true simultaneously — no partial activation
-            extinguisher._isTriggerHeld = handClosed && proximityOk;
+            // HOTFIX: starts on exactly the same frame as before; only the release
+            // is delayed by releaseGraceTime (0 = original instant release).
+            extinguisher._isTriggerHeld = Time.time - _lastPressTime <= releaseGraceTime;
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -346,7 +376,8 @@ namespace Meta.XR.BuildingBlocks
             if (hand == null || !hand.IsTracked) return 0f;
             if (hand.HandConfidence != OVRHand.TrackingConfidence.High) return 0f;
 
-            OVRSkeleton skeleton = ovrSkeletonRight;//TODO DEBUG(hand == ovrHandRight) ? ovrSkeletonRight : ovrSkeletonLeft;
+            // HOTFIX: was hard-coded to ovrSkeletonRight → left-hand grabber read the nozzle hand's fingers
+            OVRSkeleton skeleton = (hand == ovrHandRight) ? ovrSkeletonRight : ovrSkeletonLeft;
 
             if (skeleton == null || !skeleton.IsInitialized)
             {
