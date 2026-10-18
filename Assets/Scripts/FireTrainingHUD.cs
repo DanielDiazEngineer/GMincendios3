@@ -156,6 +156,29 @@ namespace Meta.XR.BuildingBlocks
             ShowWin();
         }
 
+        // ── Lifecycle (coroutine restart after menu pause) ─────────────────────
+
+        private void OnEnable()
+        {
+            // Unity kills coroutines when a GameObject is deactivated (e.g. menu open).
+            // Restart whichever step coroutine was in-flight when the menu paused us.
+            if (!_active) return;
+            switch (_step)
+            {
+                case Step.S1_RemovePin:
+                    StartCoroutine(AutoAdvanceFromStep1());
+                    break;
+                case Step.S2_AimAtFire:
+                    if (step2MaxDuration > 0f)
+                        StartCoroutine(Step2MaxDelaySkip());
+                    break;
+                case Step.S3_Spray:
+                    if (extinguisher != null && !extinguisher.shootingEnabled)
+                        StartCoroutine(EnableShootingAfterDelay());
+                    break;
+            }
+        }
+
         // ── Step Logic ─────────────────────────────────────────────────────────
 
         private IEnumerator AutoAdvanceFromStep1()

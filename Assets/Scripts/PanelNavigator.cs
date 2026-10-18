@@ -66,12 +66,18 @@ public class PanelNavigator : MonoBehaviour
         }
     }
 
+    private void OnEnable()
+    {
+        // Block clicks immediately after re-enable (e.g. menu close gesture bleeds through)
+        lastClickTime = Time.time;
+    }
+
     private void OnDisable()
-{
-    StopAllCoroutines();
-    isTransitioning = false;
-    lastClickTime = -999f;
-}
+    {
+        StopAllCoroutines();
+        isTransitioning = false;
+        lastClickTime = -999f;
+    }
 
     private void SetupPanelClickDetection()
     {

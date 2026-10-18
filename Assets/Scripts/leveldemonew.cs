@@ -237,4 +237,10 @@ public class leveldemonew : MonoBehaviour
 
         }
     }
+
+      public void RecenterView()
+    {
+        OVRManager.display.RecenterPose();
+        Debug.Log("[MenuGesture] View recentered.");
+    }
 }

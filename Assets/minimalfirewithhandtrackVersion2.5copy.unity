@@ -2198,11 +2198,11 @@ MonoBehaviour:
   winPanel: {fileID: 1080651352}
   extinguisher: {fileID: 457520615}
   playerHead: {fileID: 910919688}
-  step1Duration: 7.87
+  step1Duration: 5
   shootEnableDelay: 0.97
   aimHoldDuration: 1.53
   aimDropoutTolerance: 0.86
-  step2MaxDuration: 9.8
+  step2MaxDuration: 5
 --- !u!114 &587074606
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5827,6 +5827,12 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 1339394692232799290, guid: 83836ecfbcf0e824490f5f988e732251, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1907650896}
+    - targetCorrespondingSourceObject: {fileID: 1339394692232799290, guid: 83836ecfbcf0e824490f5f988e732251, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1907650900}
+    - targetCorrespondingSourceObject: {fileID: 1339394692232799290, guid: 83836ecfbcf0e824490f5f988e732251, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1907650899}
     - targetCorrespondingSourceObject: {fileID: 3960598555749866463, guid: 83836ecfbcf0e824490f5f988e732251, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1907650892}
@@ -6095,6 +6101,66 @@ MonoBehaviour:
   installationRoutineCheckpoint:
     _installationRoutineId: 
     _installationVariants: []
+--- !u!114 &1907650899
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1907650887}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fa7d650408530d14a829870282020dec, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  inputButton: 32768
+  controller: 1
+  activationType: 1
+  inputEvent:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 757482755}
+        m_TargetAssemblyTypeName: leveldemonew, Assembly-CSharp
+        m_MethodName: RecenterView
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+--- !u!114 &1907650900
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1907650887}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fa7d650408530d14a829870282020dec, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  inputButton: 32768
+  controller: 2
+  activationType: 1
+  inputEvent:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 757482755}
+        m_TargetAssemblyTypeName: leveldemonew, Assembly-CSharp
+        m_MethodName: OpenMenuPause
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!1 &1921765798
 GameObject:
   m_ObjectHideFlags: 0
